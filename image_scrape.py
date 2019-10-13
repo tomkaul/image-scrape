@@ -1,5 +1,6 @@
 
 import json
+import pickle
 import os, re, sys
 import requests
 import time
@@ -9,7 +10,9 @@ from PIL import Image
 
 # Provide a User-Agent which is not rejected
 UA = "Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36"
-IMAGE_BASEDIR = 'images/'
+IMAGE_BASEDIR = 'data'
+IMAGE_DIR = 'images'
+ANNOTATIONS_DIR = 'annotations'
 # Type of the images you want to download
 IMAGE_TYPE = 'svampe'
 # Which url to scape?
@@ -78,8 +81,18 @@ def get_image_info(url, images_json):
 			j += 1
 		print(f'Found {i} images', flush=True)
 	# Save the image overview
-	with open(images_json, 'w') as outfile:
-		json.dump(imgs, outfile, ensure_ascii=False, indent=4)
+	try:
+		with open(images_json, 'w') as outfile:
+			json.dump(imgs, outfile, ensure_ascii=False, indent=4)
+	except UnicodeEncodeError as e:
+		try:
+			print('Encoding with "utf-8"' + str(e))
+			with open(images_json, 'w', encoding="utf-8") as outfile:
+				json.dump(imgs, outfile, ensure_ascii=False, indent=4)
+		except Exception as e:
+			print('Giving up, write as pickle')
+			with open(images_json.replace('json', 'pkl') , 'wb') as outfile:
+				pickle.dump(imgs, outfile, protocol=pickle.HIGHEST_PROTOCOL)
 	pline()
 	print(f'Found {j} images in {len(imgs)} entries')
 	return imgs
@@ -137,53 +150,66 @@ def download_image(url, file):
 	return ok
 
 
-def download_images(name, images_json, base_dir="images/test"):
+def image_json_file(image_type=IMAGE_TYPE, base_dir=IMAGE_BASEDIR):
+	anno = f'{base_dir}/{image_type}/{ANNOTATIONS_DIR}'
+	if not os.path.exists(anno):
+		try:
+			os.makedirs(anno)
+		except OSError as e:
+			print(str(e))
+			print('Cannot create: ' + anno)
+			raise e
+	return f'{anno}/{image_type}.json'
+
+
+def download_images(image_type=IMAGE_TYPE, base_dir=IMAGE_BASEDIR):
 	pline()
+	images_json = image_json_file(image_type, base_dir)
 	print('Opening file: ' + images_json)
 	pline()
 	with open(images_json, 'r') as fp:
 		imgs = json.load(fp)
 	
-	# create directories
+	# Create image directory
+	idir  = f'{IMAGE_BASEDIR}/{IMAGE_TYPE}/{IMAGE_DIR}'
+	if not os.path.exists(idir):	
+		try:
+			os.makedirs(idir)
+		except OSError as e:
+			print(str(e))
+			raise e
+	# Run through the list and download images
 	i = 0
 	for key, val in imgs.items():
 		print(key, flush=True)
-		idir  = '/'.join([base_dir, key])
-		if not os.path.exists(idir):	
-			try:
-				os.makedirs(idir)
-			except OSError as e:
-				print(str(e))
-				raise e
-		# Run through the list and download images
 		for fname, url in val['images'].items():
 			file = '/'.join([idir, fname])
 			if download_image(url, file):
 				i += 1
-	pline()
-	print(f'Downloaded {i} images')
+		pline()
+		print(f'Downloaded {i} images')
 
 
-def web_scrape(image_type=IMAGE_TYPE, url=URL):
+def web_scrape(image_type=IMAGE_TYPE, url=URL, base_dir=IMAGE_BASEDIR):
 	# Make sure dir has been created
-	image_dir = IMAGE_BASEDIR + image_type
+	image_dir = f'{base_dir}/{image_type}'
 	if not os.path.exists(image_dir):
 		os.makedirs(image_dir)
 
 	# Get the image info from source URL
-	images_json = f"{'/'.join([image_dir, image_type])}.json"
+	images_json = image_json_file(image_type, base_dir)
 	if not os.path.exists(images_json):
 		get_image_info(url, images_json)	
 	# Download the files
-	download_images(image_type, images_json, base_dir = image_dir)
+	download_images(image_type, base_dir = base_dir)
 
 
 if __name__ == "__main__":
 	############## Main Program ############
 	pline()
 	t0 = time.time()   #start the timer
-	get_image_info(URL, './images/svampe/svampe.json')
-	# web_scrape()
+	# get_image_info(URL, image_json_file())
+	web_scrape()
 
 	# Calculating time
 	pline()
