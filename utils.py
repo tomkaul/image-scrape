@@ -17,7 +17,7 @@ def clean_images(directory, min_size=10):
 					im.close() #reload is necessary in my case
 					# Delete if too small
 					if width < min_size or height < min_size:
-						print(f, flush=True)
+						print(f'{f}, W{width}, H{height}', flush=True)
 						os.remove(f)
 						i += 1
 				except IOError:
